@@ -96,6 +96,9 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         )
         norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = act_layer or nn.GELU
+        # 兼容 timm>=0.9：父类要求 global_pool 为字符串；实际池化由下方自定义 forward_features/forward_head 完成
+        self.global_pool = 'avg' if global_pool else 'token'
+        self.global_pool_flag = global_pool
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
         self.blocks = nn.Sequential(
             *[
@@ -115,7 +118,7 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         )
         self.num_heads = num_heads
         self.depth = depth
-        self.global_pool = global_pool
+        self.global_pool = self.global_pool_flag  # 恢复布尔，供 forward_features/forward_head 使用
         self.distilled = distilled
         if self.global_pool:
             self.fc_norm = norm_layer(embed_dim)
@@ -129,7 +132,8 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
                     self.head_dist = nn.Identity()
         self.init_weights("")
 
-    def forward_features(self, x):
+    def forward_features(self, x, attn_mask=None, is_causal=False):
+        # attn_mask/is_causal: 兼容 timm>=0.9 父类 forward 的传参，此处不使用
         B = x.shape[0]
         x = self.patch_embed(x)
         # if GAP, then this cls_tokens is used as distill_tokens
@@ -151,7 +155,14 @@ class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
         else:
             x = self.norm(x)
             return x[:, 0]
-        
+
+    def forward_head(self, x, pre_logits: bool = False):
+        # 覆写父类实现：池化与 fc_norm 已在 forward_features 中完成，避免重复处理
+        if self.global_pool:
+            x = self.fc_norm(x)
+        x = self.head_drop(x)
+        return x if pre_logits else self.head(x)
+
 
 class TinyUSFM(nn.Module):
     def __init__(self, num_classes=0, **kwargs):

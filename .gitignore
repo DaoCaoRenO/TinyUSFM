@@ -1,0 +1,21 @@
+# ===== 训练产物 / 日志（体积大，不入库）=====
+logs/
+ckpt/
+checkpoints/
+checkpoints
+results/
+*.pth
+*.pt
+*.log
+
+# ===== 数据（由脚本生成，训练时本地放置）=====
+data/
+
+# ===== Python 缓存 =====
+__pycache__/
+*.py[cod]
+
+# ===== 编辑器 / 系统 =====
+.vscode/
+.idea/
+.DS_Store
